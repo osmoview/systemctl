@@ -1,0 +1,12 @@
+[Unit]
+Description={{.Description}}
+After=network.target {{.After}}
+
+[Service]
+ExecStart={{.ExecStart}}
+WorkingDirectory={{.WorkingDirectory}}
+Restart=always
+RestartSec=1min
+
+[Install]
+WantedBy=multi-user.target
