@@ -14,16 +14,16 @@ var ext = ".service"
 
 type Service struct {
 	// Commands that are executed when this service is started.
-	ExecStart string
+	ExecStart string `json:"exec_start"`
 
 	// Sets the working directory for executed processes.
-	WorkingDirectory string
+	WorkingDirectory string `json:"working_directory"`
 
 	// Just a service description
-	Description string
+	Description string `json:"description"`
 
 	// Name of units after which the service should start
-	After string
+	After string `json:"after"`
 }
 
 // WriteServiceFile build service template and write it to the writer

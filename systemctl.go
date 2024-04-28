@@ -21,11 +21,11 @@ var ErrNoSuchUnit = errors.New("no such unit")
 
 // Unit of the systemd
 type Unit struct {
-	Unit        string
-	Load        string
-	Active      string
-	Sub         string
-	Description string
+	Unit        string `json:"unit"`
+	Load        string `json:"load"`
+	Active      string `json:"active"`
+	Sub         string `json:"sub"`
+	Description string `json:"description"`
 }
 
 type Systemctl struct {
