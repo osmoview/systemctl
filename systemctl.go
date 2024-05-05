@@ -29,26 +29,45 @@ type Unit struct {
 }
 
 type Systemctl struct {
-	Dir    string
-	AsUser bool
+	Dir    string `json:"dir" yaml:"dir"`
+	AsUser bool   `json:"asuser" yaml:"asuser"`
 }
 
+// NewDefault returns default systemctl instance accessible from the root
+// use "/etc/systemd/system/" directory
 func NewDefault() *Systemctl {
 	return &Systemctl{
 		Dir: defaultServicesDir,
 	}
 }
 
+// NewAsUser returns systemctl instance accessible from the current user
+// by default use ".local/share/systemd/user/" directory
 func NewAsUser() *Systemctl {
+	return &Systemctl{
+		Dir:    resolveUserDir(),
+		AsUser: true,
+	}
+}
+
+// Init systemctl instance in relation to the specified data
+func (s *Systemctl) Init() {
+	if s.Dir == "" {
+		if s.AsUser {
+			s.Dir = resolveUserDir()
+		} else {
+			s.Dir = defaultServicesDir
+		}
+	}
+}
+
+func resolveUserDir() string {
 	dir, _ := os.UserHomeDir()
 	if dir == "" {
 		dir = "~"
 	}
 
-	return &Systemctl{
-		Dir:    filepath.Join(dir, userServicesDir),
-		AsUser: true,
-	}
+	return filepath.Join(dir, userServicesDir)
 }
 
 // Units returns list of units
