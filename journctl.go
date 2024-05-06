@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"log"
 	"os/exec"
 )
 
@@ -110,8 +109,6 @@ func (j Journalctl) execJournalctl(args []string) (cmd *exec.Cmd, stdout io.Read
 	}
 
 	// TODO: add context
-
-	log.Println(args)
 
 	cmd = exec.Command(journalctlExec, args...)
 	stdout, _ = cmd.StdoutPipe()
