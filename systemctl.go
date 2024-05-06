@@ -149,6 +149,10 @@ func (s *Systemctl) SaveService(name string, serv Service) error {
 	return serv.WriteServiceFile(f)
 }
 
+func (s *Systemctl) Journal() Journalctl {
+	return Journalctl{AsUser: s.AsUser}
+}
+
 //
 //
 //
