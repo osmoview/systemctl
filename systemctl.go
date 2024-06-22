@@ -1,12 +1,15 @@
 package systemctl
 
 import (
+	"bufio"
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 )
 
 const (
@@ -71,8 +74,13 @@ func resolveUserDir() string {
 }
 
 // Units returns list of units
-func (s *Systemctl) Units() (list []Unit, err error) {
-	err = s.execSystemctlJSON(&list)
+func (s *Systemctl) Units(pattern ...string) (list []Unit, err error) {
+	if len(pattern) == 0 {
+		err = s.execSystemctlJSON(&list)
+	} else {
+		err = s.execSystemctlJSON(&list, "list-units", pattern[0])
+	}
+
 	return
 }
 
@@ -116,6 +124,27 @@ func (s *Systemctl) Status(name string) (string, error) {
 	}
 
 	return out, err
+}
+
+func (s *Systemctl) Show(name string) (props map[string]string, err error) {
+	out, err := s.execSystemctl("show", name)
+	if err != nil {
+		return props, err
+	}
+
+	props = make(map[string]string)
+
+	scan := bufio.NewScanner(bytes.NewReader([]byte(out)))
+	for scan.Scan() {
+		ss := strings.SplitN(scan.Text(), "=", 2)
+		if len(ss) != 2 {
+			continue
+		}
+
+		props[ss[0]] = ss[1]
+	}
+
+	return
 }
 
 func (s *Systemctl) DaemonReload() (string, error) {

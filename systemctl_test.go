@@ -42,6 +42,17 @@ func TestStartService(t *testing.T) {
 	}
 }
 
+func TestUnitsPattern(t *testing.T) {
+	list, err := s.Units("testdate*")
+	if err != nil {
+		t.Error(err)
+	}
+
+	if len(list) == 0 {
+		t.Error("units not found")
+	}
+}
+
 func TestStatusService(t *testing.T) {
 	s, err := s.Status(serviceName)
 	if err != nil {
@@ -50,6 +61,17 @@ func TestStatusService(t *testing.T) {
 		}
 	}
 	t.Log(s)
+}
+
+func TestShowService(t *testing.T) {
+	props, err := s.Show(serviceName)
+	if err != nil {
+		t.Error(err)
+	}
+
+	if len(props) == 0 {
+		t.Error("props not loaded")
+	}
 }
 
 func TestStopService(t *testing.T) {
