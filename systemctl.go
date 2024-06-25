@@ -76,9 +76,9 @@ func resolveUserDir() string {
 // Units returns list of units
 func (s *Systemctl) Units(pattern ...string) (list []Unit, err error) {
 	if len(pattern) == 0 {
-		err = s.execSystemctlJSON(&list)
+		err = s.execSystemctlJSON(&list, "list-units", "--type=service", "--all")
 	} else {
-		err = s.execSystemctlJSON(&list, "list-units", pattern[0])
+		err = s.execSystemctlJSON(&list, "list-units", "--type=service", "--all", pattern[0])
 	}
 
 	return
