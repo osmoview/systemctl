@@ -63,11 +63,13 @@ func (opt JournalGetOpt) toArgs() (args []string) {
 }
 
 type JournalMsg struct {
-	Message   string `json:"MESSAGE"`
-	Timestamp string `json:"__REALTIME_TIMESTAMP"`
-	JobType   string `json:"JOB_TYPE"`
-	Transport string `json:"_TRANSPORT"`
-	Cursor    string `json:"__CURSOR"`
+	Message    string `json:"MESSAGE"`
+	Timestamp  string `json:"__REALTIME_TIMESTAMP"`
+	JobType    string `json:"JOB_TYPE"`
+	Transport  string `json:"_TRANSPORT"`
+	Cursor     string `json:"__CURSOR"`
+	ExitStatus string `json:"EXIT_STATUS"`
+	ExitCode   string `json:"EXIT_CODE"`
 }
 
 // Get journal messages by options
