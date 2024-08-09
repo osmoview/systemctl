@@ -1,6 +1,8 @@
 package systemctl
 
-import "testing"
+import (
+	"testing"
+)
 
 func TestJournalctl(t *testing.T) {
 	j := NewDefaultJournal()

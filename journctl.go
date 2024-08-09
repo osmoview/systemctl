@@ -6,6 +6,8 @@ import (
 	"errors"
 	"io"
 	"os/exec"
+
+	"github.com/acarl005/stripansi"
 )
 
 const journalctlExec = "journalctl"
@@ -63,7 +65,16 @@ func (opt JournalGetOpt) toArgs() (args []string) {
 }
 
 type JournalMsg struct {
-	Message    string `json:"MESSAGE"`
+	Message    string `json:"message"`
+	Timestamp  string `json:"timestamp"`
+	JobType    string `json:"job_type"`
+	Transport  string `json:"transport"`
+	Cursor     string `json:"cursor"`
+	ExitStatus string `json:"exit_status"`
+	ExitCode   string `json:"exit_code"`
+}
+
+type journalMsgFields struct {
 	Timestamp  string `json:"__REALTIME_TIMESTAMP"`
 	JobType    string `json:"JOB_TYPE"`
 	Transport  string `json:"_TRANSPORT"`
@@ -87,10 +98,28 @@ func (j Journalctl) Get(opt JournalGetOpt) (msgs []JournalMsg, err error) {
 		s := bufio.NewScanner(stdout)
 
 		for s.Scan() {
-			var msg JournalMsg
-			if err = json.Unmarshal(s.Bytes(), &msg); err != nil {
+			line := s.Bytes()
+
+			message, err := j.decodeMsgString(line)
+			if err != nil {
 				errs = append(errs, err)
 				continue
+			}
+
+			var rawmsg journalMsgFields
+			if err = json.Unmarshal(line, &rawmsg); err != nil {
+				errs = append(errs, err)
+				continue
+			}
+
+			msg := JournalMsg{
+				Message:    stripansi.Strip(message),
+				Timestamp:  rawmsg.Timestamp,
+				JobType:    rawmsg.JobType,
+				Transport:  rawmsg.Timestamp,
+				Cursor:     rawmsg.Cursor,
+				ExitStatus: rawmsg.Cursor,
+				ExitCode:   rawmsg.ExitCode,
 			}
 
 			msgs = append(msgs, msg)
@@ -102,6 +131,30 @@ func (j Journalctl) Get(opt JournalGetOpt) (msgs []JournalMsg, err error) {
 	}
 
 	return msgs, errors.Join(errs...)
+}
+
+type journalMsgString struct {
+	Message string `json:"MESSAGE"`
+}
+
+type journalMsgBytes struct {
+	Message []byte `json:"MESSAGE"`
+}
+
+func (j Journalctl) decodeMsgString(line []byte) (message string, err error) {
+	// try to decode message as string
+	var strmsg journalMsgString
+	if err = json.Unmarshal(line, &strmsg); err == nil {
+		return strmsg.Message, nil
+	}
+
+	// try to decode message as bytes
+	var bytesmsg journalMsgBytes
+	if err = json.Unmarshal(line, &bytesmsg); err == nil {
+		return string(bytesmsg.Message), nil
+	}
+
+	return "", errors.New("failed to decode message text")
 }
 
 func (j Journalctl) execJournalctl(args []string) (cmd *exec.Cmd, stdout io.ReadCloser, err error) {
