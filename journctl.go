@@ -1,7 +1,6 @@
 package systemctl
 
 import (
-	"bufio"
 	"encoding/json"
 	"errors"
 	"io"
@@ -39,6 +38,7 @@ type JournalGetOpt struct {
 	// Show entries after the specified cursor
 	AfterCursor string
 
+	Follow bool
 	// TODO: add additional options
 }
 
@@ -59,6 +59,10 @@ func (opt JournalGetOpt) toArgs() (args []string) {
 
 	if opt.AfterCursor != "" {
 		args = append(args, opt.AfterCursor)
+	}
+
+	if opt.Follow {
+		args = append(args, "-f")
 	}
 
 	return args
@@ -84,53 +88,54 @@ type journalMsgFields struct {
 }
 
 // Get journal messages by options
-func (j Journalctl) Get(opt JournalGetOpt) (msgs []JournalMsg, err error) {
+func (j Journalctl) Stream(opt JournalGetOpt) (io.ReadCloser, chan struct{}, error) {
 	cmd, stdout, err := j.execJournalctl(opt.toArgs())
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	// all errors occured when read stdout
-	var errs []error
+	kill := make(chan struct{})
 
-	// read stdout and parse journal messages
 	go func() {
-		s := bufio.NewScanner(stdout)
-
-		for s.Scan() {
-			line := s.Bytes()
-
-			message, err := j.decodeMsgString(line)
-			if err != nil {
-				errs = append(errs, err)
-				continue
-			}
-
-			var rawmsg journalMsgFields
-			if err = json.Unmarshal(line, &rawmsg); err != nil {
-				errs = append(errs, err)
-				continue
-			}
-
-			msg := JournalMsg{
-				Message:    stripansi.Strip(message),
-				Timestamp:  rawmsg.Timestamp,
-				JobType:    rawmsg.JobType,
-				Transport:  rawmsg.Timestamp,
-				Cursor:     rawmsg.Cursor,
-				ExitStatus: rawmsg.Cursor,
-				ExitCode:   rawmsg.ExitCode,
-			}
-
-			msgs = append(msgs, msg)
+		<-kill
+		if cmd == nil || cmd.Process == nil {
+			return
 		}
+		cmd.Process.Kill()
 	}()
 
-	if err := cmd.Wait(); err != nil {
-		errs = append(errs, err)
+	go func() {
+		if err := cmd.Wait(); err != nil {
+			return
+		}
+		stdout.Close()
+	}()
+
+	return stdout, kill, err
+}
+
+func (j Journalctl) DecodeMsgString(line []byte) (JournalMsg, error) {
+	message, err := j.decodeMsgString(line)
+	if err != nil {
+		return JournalMsg{}, err
 	}
 
-	return msgs, errors.Join(errs...)
+	var rawmsg journalMsgFields
+	if err = json.Unmarshal(line, &rawmsg); err != nil {
+		return JournalMsg{}, err
+	}
+
+	msg := JournalMsg{
+		Message:    stripansi.Strip(message),
+		Timestamp:  rawmsg.Timestamp,
+		JobType:    rawmsg.JobType,
+		Transport:  rawmsg.Timestamp,
+		Cursor:     rawmsg.Cursor,
+		ExitStatus: rawmsg.Cursor,
+		ExitCode:   rawmsg.ExitCode,
+	}
+
+	return msg, nil
 }
 
 type journalMsgString struct {

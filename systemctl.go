@@ -206,5 +206,5 @@ func (s *Systemctl) execSystemctl(args ...string) (string, error) {
 	}
 
 	out, err := exec.Command(systemctlExec, args...).CombinedOutput()
-	return fmt.Sprintf("%s", out), err
+	return string(out), err
 }
