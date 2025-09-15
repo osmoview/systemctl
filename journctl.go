@@ -1,6 +1,7 @@
 package systemctl
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -87,22 +88,25 @@ type journalMsgFields struct {
 	ExitCode   string `json:"EXIT_CODE"`
 }
 
-// Get journal messages by options
-func (j Journalctl) Stream(opt JournalGetOpt) (io.ReadCloser, chan struct{}, error) {
-	cmd, stdout, err := j.execJournalctl(opt.toArgs())
+// Get journal messages by options;
+// Return stream reader, close function and error.
+// To close stream, use close function.
+func (j Journalctl) Stream(opt JournalGetOpt) (io.ReadCloser, func(), error) {
+	opt.Follow = true
+	ctx, cancel := context.WithCancel(context.Background())
+
+	cmd, stdout, err := j.execJournalctlWithContext(ctx, opt.toArgs())
 	if err != nil {
-		return nil, nil, err
+		return nil, cancel, err
 	}
 
-	kill := make(chan struct{})
-
-	go func() {
-		<-kill
+	var close = func() {
+		cancel()
 		if cmd == nil || cmd.Process == nil {
 			return
 		}
 		cmd.Process.Kill()
-	}()
+	}
 
 	go func() {
 		if err := cmd.Wait(); err != nil {
@@ -111,7 +115,7 @@ func (j Journalctl) Stream(opt JournalGetOpt) (io.ReadCloser, chan struct{}, err
 		stdout.Close()
 	}()
 
-	return stdout, kill, err
+	return stdout, close, err
 }
 
 func (j Journalctl) DecodeMsgString(line []byte) (JournalMsg, error) {
@@ -162,7 +166,7 @@ func (j Journalctl) decodeMsgString(line []byte) (message string, err error) {
 	return "", errors.New("failed to decode message text")
 }
 
-func (j Journalctl) execJournalctl(args []string) (cmd *exec.Cmd, stdout io.ReadCloser, err error) {
+func (j Journalctl) execJournalctlWithContext(ctx context.Context, args []string) (cmd *exec.Cmd, stdout io.ReadCloser, err error) {
 	args = append(args, "--output", "json")
 	if j.AsUser {
 		args = append(args, "--user")
@@ -170,7 +174,7 @@ func (j Journalctl) execJournalctl(args []string) (cmd *exec.Cmd, stdout io.Read
 
 	// TODO: add context
 
-	cmd = exec.Command(journalctlExec, args...)
+	cmd = exec.CommandContext(ctx, journalctlExec, args...)
 	stdout, _ = cmd.StdoutPipe()
 
 	return cmd, stdout, cmd.Start()
