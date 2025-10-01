@@ -1,6 +1,7 @@
 package systemctl
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -116,6 +117,56 @@ func (j Journalctl) Stream(opt JournalGetOpt) (io.ReadCloser, func(), error) {
 	}()
 
 	return stdout, close, err
+}
+
+// Get journal messages by options
+func (j Journalctl) Get(opt JournalGetOpt) (msgs []JournalMsg, err error) {
+	cmd, stdout, err := j.execJournalctlWithContext(context.Background(), opt.toArgs())
+	if err != nil {
+		return nil, err
+	}
+
+	// all errors occured when read stdout
+	var errs []error
+
+	// read stdout and parse journal messages
+	go func() {
+		s := bufio.NewScanner(stdout)
+
+		for s.Scan() {
+			line := s.Bytes()
+
+			message, err := j.decodeMsgString(line)
+			if err != nil {
+				errs = append(errs, err)
+				continue
+			}
+
+			var rawmsg journalMsgFields
+			if err = json.Unmarshal(line, &rawmsg); err != nil {
+				errs = append(errs, err)
+				continue
+			}
+
+			msg := JournalMsg{
+				Message:    stripansi.Strip(message),
+				Timestamp:  rawmsg.Timestamp,
+				JobType:    rawmsg.JobType,
+				Transport:  rawmsg.Timestamp,
+				Cursor:     rawmsg.Cursor,
+				ExitStatus: rawmsg.Cursor,
+				ExitCode:   rawmsg.ExitCode,
+			}
+
+			msgs = append(msgs, msg)
+		}
+	}()
+
+	if err := cmd.Wait(); err != nil {
+		errs = append(errs, err)
+	}
+
+	return msgs, errors.Join(errs...)
 }
 
 func (j Journalctl) DecodeMsgString(line []byte) (JournalMsg, error) {
