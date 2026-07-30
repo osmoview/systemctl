@@ -37,6 +37,18 @@ type JournalGetOpt struct {
 	// Show entries not older than the specified date
 	Since string
 
+	// Show entries not newer than the specified date
+	Until string
+
+	// Show only entries whose message matches the pattern (case-insensitive)
+	Grep string
+
+	// Reverse output order (newest entries first)
+	Reverse bool
+
+	// Head stops reading after N entries; 0 = read all
+	Head int
+
 	// Show entries after the specified cursor
 	AfterCursor string
 
@@ -51,12 +63,24 @@ func (opt JournalGetOpt) toArgs() (args []string) {
 
 	if opt.Lines != "" {
 		args = append(args, "-n", opt.Lines)
-	} else {
+	} else if opt.Head <= 0 {
 		args = append(args, "-n", "20")
+	}
+
+	if opt.Reverse {
+		args = append(args, "-r")
 	}
 
 	if opt.Since != "" {
 		args = append(args, "--since", opt.Since)
+	}
+
+	if opt.Until != "" {
+		args = append(args, "--until", opt.Until)
+	}
+
+	if opt.Grep != "" {
+		args = append(args, "--case-sensitive=no", "-g", opt.Grep)
 	}
 
 	if opt.AfterCursor != "" {
@@ -121,49 +145,37 @@ func (j Journalctl) Stream(opt JournalGetOpt) (io.ReadCloser, func(), error) {
 
 // Get journal messages by options
 func (j Journalctl) Get(opt JournalGetOpt) (msgs []JournalMsg, err error) {
-	cmd, stdout, err := j.execJournalctlWithContext(context.Background(), opt.toArgs())
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	cmd, stdout, err := j.execJournalctlWithContext(ctx, opt.toArgs())
 	if err != nil {
 		return nil, err
 	}
 
 	// all errors occured when read stdout
 	var errs []error
+	var stopped bool
 
-	// read stdout and parse journal messages
-	go func() {
-		s := bufio.NewScanner(stdout)
-
-		for s.Scan() {
-			line := s.Bytes()
-
-			message, err := j.decodeMsgString(line)
-			if err != nil {
-				errs = append(errs, err)
-				continue
-			}
-
-			var rawmsg journalMsgFields
-			if err = json.Unmarshal(line, &rawmsg); err != nil {
-				errs = append(errs, err)
-				continue
-			}
-
-			msg := JournalMsg{
-				Message:    stripansi.Strip(message),
-				Timestamp:  rawmsg.Timestamp,
-				JobType:    rawmsg.JobType,
-				Transport:  rawmsg.Timestamp,
-				Cursor:     rawmsg.Cursor,
-				ExitStatus: rawmsg.Cursor,
-				ExitCode:   rawmsg.ExitCode,
-			}
-
-			msgs = append(msgs, msg)
+	s := bufio.NewScanner(stdout)
+	for s.Scan() {
+		msg, err := j.DecodeMsgString(s.Bytes())
+		if err != nil {
+			errs = append(errs, err)
+			continue
 		}
-	}()
 
-	if err := cmd.Wait(); err != nil {
-		errs = append(errs, err)
+		msgs = append(msgs, msg)
+
+		if opt.Head > 0 && len(msgs) >= opt.Head {
+			stopped = true
+			cancel()
+			break
+		}
+	}
+
+	if werr := cmd.Wait(); werr != nil && !stopped {
+		errs = append(errs, werr)
 	}
 
 	return msgs, errors.Join(errs...)
