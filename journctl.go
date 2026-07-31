@@ -13,6 +13,8 @@ import (
 
 const journalctlExec = "journalctl"
 
+const maxJournalLineSize = 4 * 1024 * 1024
+
 type Journalctl struct {
 	AsUser bool
 }
@@ -158,6 +160,7 @@ func (j Journalctl) Get(opt JournalGetOpt) (msgs []JournalMsg, err error) {
 	var stopped bool
 
 	s := bufio.NewScanner(stdout)
+	s.Buffer(make([]byte, 0, bufio.MaxScanTokenSize), maxJournalLineSize)
 	for s.Scan() {
 		msg, err := j.DecodeMsgString(s.Bytes())
 		if err != nil {
@@ -174,8 +177,12 @@ func (j Journalctl) Get(opt JournalGetOpt) (msgs []JournalMsg, err error) {
 		}
 	}
 
-	if werr := cmd.Wait(); werr != nil && !stopped {
-		errs = append(errs, werr)
+	if err := s.Err(); err != nil {
+		errs = append(errs, err)
+	}
+
+	if err := cmd.Wait(); err != nil && !stopped {
+		errs = append(errs, err)
 	}
 
 	return msgs, errors.Join(errs...)
@@ -235,10 +242,12 @@ func (j Journalctl) execJournalctlWithContext(ctx context.Context, args []string
 		args = append(args, "--user")
 	}
 
-	// TODO: add context
-
 	cmd = exec.CommandContext(ctx, journalctlExec, args...)
-	stdout, _ = cmd.StdoutPipe()
+
+	stdout, err = cmd.StdoutPipe()
+	if err != nil {
+		return nil, nil, err
+	}
 
 	return cmd, stdout, cmd.Start()
 }
